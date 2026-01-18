@@ -11,6 +11,7 @@ from ..core.entities import (
 )
 from ..core.utils.platform_utils import is_macos
 from .FasterWhisperSettingWidget import FasterWhisperSettingWidget
+from .PyWhisperCppSettingWidget import PyWhisperCppSettingWidget
 from .WhisperAPISettingWidget import WhisperAPISettingWidget
 from .WhisperCppSettingWidget import WhisperCppSettingWidget
 
@@ -32,6 +33,11 @@ class TranscriptionSettingCard(QWidget):
         self.whisper_cpp_widget = WhisperCppSettingWidget(self)
         self.whisper_api_widget = WhisperAPISettingWidget(self)
 
+        # PyWhisperCpp 仅在 macOS 上可用
+        self.pywhisper_cpp_widget: Optional[PyWhisperCppSettingWidget] = None
+        if is_macos():
+            self.pywhisper_cpp_widget = PyWhisperCppSettingWidget(self)
+
         # FasterWhisper 在 macOS 上不可用
         self.faster_whisper_widget: Optional[FasterWhisperSettingWidget] = None
         if not is_macos():
@@ -40,6 +46,8 @@ class TranscriptionSettingCard(QWidget):
         self.stacked_widget.addWidget(self.empty_widget)  # 添加空白页面
         self.stacked_widget.addWidget(self.whisper_cpp_widget)
         self.stacked_widget.addWidget(self.whisper_api_widget)
+        if self.pywhisper_cpp_widget is not None:
+            self.stacked_widget.addWidget(self.pywhisper_cpp_widget)
         if self.faster_whisper_widget is not None:
             self.stacked_widget.addWidget(self.faster_whisper_widget)
 
@@ -49,9 +57,17 @@ class TranscriptionSettingCard(QWidget):
         # 切换对应的设置界面
         if value == TranscribeModelEnum.WHISPER_CPP.value:
             self.stacked_widget.setCurrentWidget(self.whisper_cpp_widget)
+        elif value == TranscribeModelEnum.PYWHISPER_CPP.value:
+            if self.pywhisper_cpp_widget is not None:
+                self.stacked_widget.setCurrentWidget(self.pywhisper_cpp_widget)
+            else:
+                self.stacked_widget.setCurrentWidget(self.empty_widget)
         elif value == TranscribeModelEnum.WHISPER_API.value:
             self.stacked_widget.setCurrentWidget(self.whisper_api_widget)
         elif value == TranscribeModelEnum.FASTER_WHISPER.value:
-            self.stacked_widget.setCurrentWidget(self.faster_whisper_widget)
+            if self.faster_whisper_widget is not None:
+                self.stacked_widget.setCurrentWidget(self.faster_whisper_widget)
+            else:
+                self.stacked_widget.setCurrentWidget(self.empty_widget)
         else:
             self.stacked_widget.setCurrentWidget(self.empty_widget)

@@ -115,6 +115,7 @@ class TranscribeModelEnum(Enum):
     WHISPER_API = "Whisper [API] ✨"
     FASTER_WHISPER = "FasterWhisper ✨"
     WHISPER_CPP = "WhisperCpp"
+    PYWHISPER_CPP = "PyWhisperCpp [CoreML] ✨"
 
 
 class TranslatorServiceEnum(Enum):
@@ -342,6 +343,17 @@ class FasterWhisperModelEnum(Enum):
     LARGE_V3_TURBO = "large-v3-turbo"
 
 
+class PyWhisperModelEnum(Enum):
+    TINY = "tiny"
+    BASE = "base"
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE_V1 = "large-v1"
+    LARGE_V2 = "large-v2"
+    LARGE_V3 = "large-v3"
+    LARGE_V3_TURBO = "large-v3-turbo"
+
+
 LANGUAGES = {
     "英语": "en",
     "中文": "zh",
@@ -511,6 +523,15 @@ class TranscribeConfig:
     faster_whisper_ff_mdx_kim2: bool = False
     faster_whisper_one_word: bool = True
     faster_whisper_prompt: Optional[str] = None
+    # PyWhisper Cpp 配置
+    pywhisper_model: Optional["PyWhisperModelEnum"] = None
+    pywhisper_use_coreml: bool = True
+    pywhisper_n_threads: int = 4
+    # PyWhisper VAD 配置
+    pywhisper_vad_filter: bool = False
+    pywhisper_vad_method: Optional[VadMethodEnum] = VadMethodEnum.SILERO_V4_FW
+    pywhisper_vad_threshold: int = 50  # 0-100, will be converted to 0.0-1.0
+    pywhisper_vad_max_workers: int = 2  # Maximum concurrent workers for VAD segment processing
 
     def _mask_key(self, key: Optional[str]) -> str:
         """Mask sensitive key for display"""
@@ -554,6 +575,13 @@ class TranscribeConfig:
             lines.append(
                 f"Model: {self.whisper_model.value if self.whisper_model else 'None'}"
             )
+
+        elif self.transcribe_model == TranscribeModelEnum.PYWHISPER_CPP:
+            lines.append(
+                f"Model: {self.pywhisper_model.value if self.pywhisper_model else 'None'}"
+            )
+            lines.append(f"CoreML: {self.pywhisper_use_coreml}")
+            lines.append(f"Threads: {self.pywhisper_n_threads}")
 
         lines.append("=" * 42)
         return "\n".join(lines)

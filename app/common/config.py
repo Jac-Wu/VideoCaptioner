@@ -24,6 +24,7 @@ from app.core.utils.platform_utils import get_available_transcribe_models
 from ..core.entities import (
     FasterWhisperModelEnum,
     LLMServiceEnum,
+    PyWhisperModelEnum,
     SubtitleLayoutEnum,
     SubtitleRenderModeEnum,
     TranscribeLanguageEnum,
@@ -171,6 +172,38 @@ class Config(QConfig):
         WhisperModelEnum.TINY,
         OptionsValidator(WhisperModelEnum),
         EnumSerializer(WhisperModelEnum),
+    )
+
+    # ------------------- PyWhisper Cpp 配置 -------------------
+    pywhisper_model = OptionsConfigItem(
+        "PyWhisper",
+        "PyWhisperModel",
+        PyWhisperModelEnum.TINY,
+        OptionsValidator(PyWhisperModelEnum),
+        EnumSerializer(PyWhisperModelEnum),
+    )
+    pywhisper_use_coreml = ConfigItem(
+        "PyWhisper", "UseCoreML", True, BoolValidator()
+    )
+    pywhisper_n_threads = RangeConfigItem(
+        "PyWhisper", "NThreads", 4, RangeValidator(1, 16)
+    )
+    # PyWhisper VAD 配置
+    pywhisper_vad_filter = ConfigItem(
+        "PyWhisper", "VadFilter", False, BoolValidator()
+    )
+    pywhisper_vad_threshold = RangeConfigItem(
+        "PyWhisper", "VadThreshold", 50, RangeValidator(0, 100)
+    )
+    pywhisper_vad_method = OptionsConfigItem(
+        "PyWhisper",
+        "VadMethod",
+        VadMethodEnum.SILERO_V4_FW,
+        OptionsValidator(VadMethodEnum),
+        EnumSerializer(VadMethodEnum),
+    )
+    pywhisper_vad_max_workers = RangeConfigItem(
+        "PyWhisper", "VadMaxWorkers", 2, RangeValidator(1, 8)
     )
 
     # ------------------- Faster Whisper 配置 -------------------

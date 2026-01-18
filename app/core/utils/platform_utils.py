@@ -116,19 +116,23 @@ def get_available_transcribe_models() -> list[TranscribeModelEnum]:
     获取当前平台可用的转录模型列表
 
     macOS 上不支持 FasterWhisper，因为它依赖 CUDA/CuDNN
+    PyWhisperCpp 仅在 macOS 上可用（CoreML 加速）
 
     Returns:
         list[TranscribeModelEnum]: 可用的转录模型列表
     """
     all_models = list(TranscribeModelEnum)
 
-    # macOS 上过滤掉 FasterWhisper
+    # macOS 上过滤掉 FasterWhisper，但保留 PyWhisperCpp
     if is_macos():
         return [
-            model for model in all_models if model != TranscribeModelEnum.FASTER_WHISPER
+            model
+            for model in all_models
+            if model != TranscribeModelEnum.FASTER_WHISPER
         ]
 
-    return all_models
+    # 非 macOS 平台过滤掉 PyWhisperCpp
+    return [model for model in all_models if model != TranscribeModelEnum.PYWHISPER_CPP]
 
 
 def is_model_available(model: TranscribeModelEnum) -> bool:
@@ -143,6 +147,10 @@ def is_model_available(model: TranscribeModelEnum) -> bool:
     """
     # FasterWhisper 在 macOS 上不可用
     if is_macos() and model == TranscribeModelEnum.FASTER_WHISPER:
+        return False
+
+    # PyWhisperCpp 仅在 macOS 上可用
+    if not is_macos() and model == TranscribeModelEnum.PYWHISPER_CPP:
         return False
 
     return True

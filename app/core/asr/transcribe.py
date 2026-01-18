@@ -3,9 +3,11 @@ from app.core.asr.bcut import BcutASR
 from app.core.asr.chunked_asr import ChunkedASR
 from app.core.asr.faster_whisper import FasterWhisperASR
 from app.core.asr.jianying import JianYingASR
+from app.core.asr.pywhisper_cpp import PyWhisperCppASR
 from app.core.asr.whisper_api import WhisperAPI
 from app.core.asr.whisper_cpp import WhisperCppASR
 from app.core.entities import TranscribeConfig, TranscribeModelEnum
+from typing import Union
 
 
 def transcribe(audio_path: str, config: TranscribeConfig, callback=None) -> ASRData:
@@ -62,6 +64,9 @@ def _create_asr_instance(audio_path: str, config: TranscribeConfig) -> ChunkedAS
 
     elif model_type == TranscribeModelEnum.WHISPER_CPP:
         return _create_whisper_cpp_asr(audio_path, config)
+
+    elif model_type == TranscribeModelEnum.PYWHISPER_CPP:
+        return _create_pywhisper_cpp_asr(config, audio_path)
 
     elif model_type == TranscribeModelEnum.WHISPER_API:
         return _create_whisper_api_asr(audio_path, config)
@@ -123,6 +128,26 @@ def _create_whisper_api_asr(audio_path: str, config: TranscribeConfig) -> Chunke
     }
     return ChunkedASR(
         asr_class=WhisperAPI, audio_path=audio_path, asr_kwargs=asr_kwargs
+    )
+
+
+def _create_pywhisper_cpp_asr(
+    config: TranscribeConfig, audio_input: Union[str, bytes]
+) -> PyWhisperCppASR:
+    """Create PyWhisperCpp ASR instance."""
+    return PyWhisperCppASR(
+        audio_input=audio_input,
+        language=config.transcribe_language,
+        whisper_model=config.pywhisper_model.value if config.pywhisper_model else None,
+        use_cache=False,
+        need_word_time_stamp=config.need_word_time_stamp,
+        use_coreml=config.pywhisper_use_coreml,
+        n_threads=config.pywhisper_n_threads,
+        # VAD parameters
+        vad_filter=config.pywhisper_vad_filter,
+        vad_method=config.pywhisper_vad_method.value if config.pywhisper_vad_method else "silero_v4_fw",
+        vad_threshold=config.pywhisper_vad_threshold,
+        vad_max_workers=config.pywhisper_vad_max_workers,
     )
 
 
