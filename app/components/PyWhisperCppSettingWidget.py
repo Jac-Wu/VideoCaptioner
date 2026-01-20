@@ -106,7 +106,7 @@ PYWHISPER_CPP_MODELS = [
         "value": "ggml-large-v3-turbo.bin",
         "size": "1.62 GB",
         "downloadLink": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
-        "mirrorLink": "https://www.modelscope.cn/models/cjc1887415157/whisper.cpp/resolve/master/ggml-large-v3-turbo.bin",
+        "mirrorLink": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
         "sha": "4af2b29d7ec73d781377bfd1758ca957a807e941",
     },
 ]
@@ -514,7 +514,34 @@ class PyWhisperCppSettingWidget(QWidget):
             cfg.pywhisper_vad_max_workers,
             FluentIcon.SPEED_HIGH,
             self.tr("最大并发数"),
-            self.tr("VAD分段并发处理的最大任务数（1-8）"),
+            self.tr("VAD分段并发处理的最大任务数（1-8）。注意：启用上下文拼接后此选项无效"),
+            self.vad_group,
+        )
+
+        # VAD语音填充时长
+        self.vad_padding_card = RangeSettingCard(
+            cfg.pywhisper_vad_padding_ms,
+            FluentIcon.ALIGNMENT,
+            self.tr("语音填充时长"),
+            self.tr("在检测到的语音前后添加的缓冲时长（0-5000ms）"),
+            self.vad_group,
+        )
+
+        # VAD最小静音时长
+        self.vad_min_silence_card = RangeSettingCard(
+            cfg.pywhisper_vad_min_silence_ms,
+            FluentIcon.PAUSE,
+            self.tr("最小静音时长"),
+            self.tr("分割语音段的最小静音时长（100-5000ms）"),
+            self.vad_group,
+        )
+
+        # VAD上下文拼接
+        self.vad_context_stitching_card = SwitchSettingCard(
+            FluentIcon.LINK,
+            self.tr("上下文拼接"),
+            self.tr("使用前一段的文本作为下一段的上下文提示（启用后将禁用并行处理以保证上下文连贯性）"),
+            cfg.pywhisper_vad_context_stitching,
             self.vad_group,
         )
 
@@ -523,6 +550,9 @@ class PyWhisperCppSettingWidget(QWidget):
         self.vad_group.addSettingCard(self.vad_threshold_card)
         self.vad_group.addSettingCard(self.vad_method_card)
         self.vad_group.addSettingCard(self.vad_max_workers_card)
+        self.vad_group.addSettingCard(self.vad_padding_card)
+        self.vad_group.addSettingCard(self.vad_min_silence_card)
+        self.vad_group.addSettingCard(self.vad_context_stitching_card)
 
         # 将设置组添加到容器布局
         self.containerLayout.addWidget(self.setting_group)
@@ -544,12 +574,23 @@ class PyWhisperCppSettingWidget(QWidget):
     def setup_signals(self):
         self.manage_model_card.linkButton.clicked.connect(self.show_download_dialog)
         self.vad_filter_card.checkedChanged.connect(self._on_vad_filter_changed)
+        self.vad_context_stitching_card.checkedChanged.connect(self._on_context_stitching_changed)
 
     def _on_vad_filter_changed(self, checked: bool):
         """VAD过滤开关状态改变时的处理"""
         self.vad_threshold_card.setEnabled(checked)
         self.vad_method_card.setEnabled(checked)
-        self.vad_max_workers_card.setEnabled(checked)
+        self.vad_padding_card.setEnabled(checked)
+        self.vad_min_silence_card.setEnabled(checked)
+        self.vad_context_stitching_card.setEnabled(checked)
+        # 最大并发数的启用状态取决于VAD过滤和上下文拼接
+        self.vad_max_workers_card.setEnabled(checked and not cfg.pywhisper_vad_context_stitching.value)
+
+    def _on_context_stitching_changed(self, checked: bool):
+        """上下文拼接开关状态改变时的处理"""
+        # 启用上下文拼接时禁用最大并发数（因为需要顺序处理）
+        if cfg.pywhisper_vad_filter.value:
+            self.vad_max_workers_card.setEnabled(not checked)
 
     def show_download_dialog(self):
         """显示下载对话框"""

@@ -148,6 +148,9 @@ def _create_pywhisper_cpp_asr(
         vad_method=config.pywhisper_vad_method.value if config.pywhisper_vad_method else "silero_v4_fw",
         vad_threshold=config.pywhisper_vad_threshold,
         vad_max_workers=config.pywhisper_vad_max_workers,
+        vad_padding_ms=config.pywhisper_vad_padding_ms,
+        vad_min_silence_ms=config.pywhisper_vad_min_silence_ms,
+        vad_context_stitching=config.pywhisper_vad_context_stitching,
     )
 
 

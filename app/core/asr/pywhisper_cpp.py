@@ -51,10 +51,10 @@ def _transcribe_segment_worker(args):
     This function reuses the model loaded in _init_worker.
     
     Args:
-        args: Tuple of (segment_index, start_ms, end_ms, audio_segment_bytes, language)
+        args: Tuple of (segment_index, start_ms, end_ms, audio_segment_bytes, language, previous_text, context_stitching)
     
     Returns:
-        dict with 'index', 'start_ms', 'end_ms', 'segments', 'error'
+        dict with 'index', 'start_ms', 'end_ms', 'segments', 'error', 'text'
     """
     global _worker_model
     
@@ -63,7 +63,7 @@ def _transcribe_segment_worker(args):
     from pydub import AudioSegment
     from io import BytesIO
     
-    segment_index, start_ms, end_ms, audio_segment_bytes, language = args
+    segment_index, start_ms, end_ms, audio_segment_bytes, language, previous_text, context_stitching = args
     
     try:
         if _worker_model is None:
@@ -89,22 +89,38 @@ def _transcribe_segment_worker(args):
                 "print_realtime": False,
             }
             
+            # Add initial prompt based on language and context stitching
             if language == "zh":
-                params["initial_prompt"] = "你好，我们需要使用简体中文，以下是普通话的句子。"
+                base_prompt = "你好，我们需要使用简体中文，以下是普通话的句子。"
+                if context_stitching and previous_text:
+                    # Use last 20 characters from previous segment as context
+                    context = previous_text[-20:] if len(previous_text) > 20 else previous_text
+                    params["initial_prompt"] = base_prompt + " " + context
+                    logger.info(f"Worker {os.getpid()}: Using context: '{context}'")
+                else:
+                    params["initial_prompt"] = base_prompt
+            elif context_stitching and previous_text:
+                # For non-Chinese languages, use previous text as context
+                context = previous_text[-20:] if len(previous_text) > 20 else previous_text
+                params["initial_prompt"] = context
+                logger.info(f"Worker {os.getpid()}: Using context: '{context}'")
             
             # Perform transcription using the pre-loaded model
             segments = _worker_model.transcribe(segment_path, **params)
             
             # Adjust timestamps and collect results
             adjusted_segments = []
+            full_text = ""
             for seg in segments:
                 adjusted_start = (seg.t0 / 100.0) + (start_ms / 1000.0)
                 adjusted_end = (seg.t1 / 100.0) + (start_ms / 1000.0)
+                text = seg.text.strip()
+                full_text += text + " "
                 
                 adjusted_segments.append({
                     'start': adjusted_start,
                     'end': adjusted_end,
-                    'text': seg.text.strip()
+                    'text': text
                 })
             
             return {
@@ -112,6 +128,7 @@ def _transcribe_segment_worker(args):
                 'start_ms': start_ms,
                 'end_ms': end_ms,
                 'segments': adjusted_segments,
+                'text': full_text.strip(),  # Return full text for context stitching
                 'error': None
             }
             
@@ -130,6 +147,7 @@ def _transcribe_segment_worker(args):
             'start_ms': start_ms,
             'end_ms': end_ms,
             'segments': [],
+            'text': '',
             'error': str(e)
         }
 
@@ -155,6 +173,9 @@ class PyWhisperCppASR(BaseASR):
         vad_method: str = "silero_v4_fw",
         vad_threshold: float = 0.5,
         vad_max_workers: int = 2,
+        vad_padding_ms: int = 400,
+        vad_min_silence_ms: int = 1000,
+        vad_context_stitching: bool = True,
     ):
         super().__init__(audio_input, use_cache)
 
@@ -189,6 +210,9 @@ class PyWhisperCppASR(BaseASR):
         # Convert threshold from 0-100 to 0.0-1.0
         self.vad_threshold = vad_threshold / 100.0 if isinstance(vad_threshold, int) else vad_threshold
         self.vad_max_workers = vad_max_workers
+        self.vad_padding_ms = vad_padding_ms
+        self.vad_min_silence_ms = vad_min_silence_ms
+        self.vad_context_stitching = vad_context_stitching
 
         # Initialize pywhispercpp model (lazy loading)
         self.model = None
@@ -253,6 +277,7 @@ class PyWhisperCppASR(BaseASR):
             import numpy as np
             
             logger.info(f"Segmenting audio with VAD (method: {self.vad_method}, threshold: {self.vad_threshold})")
+            logger.info(f"VAD config: padding={self.vad_padding_ms}ms, min_silence={self.vad_min_silence_ms}ms, context_stitching={self.vad_context_stitching}")
             
             # Load audio
             audio = AudioSegment.from_file(audio_path)
@@ -282,12 +307,14 @@ class PyWhisperCppASR(BaseASR):
             
             (get_speech_timestamps, _, _, _, _) = utils
             
-            # Get speech timestamps
+            # Get speech timestamps with padding and silence merging
             speech_timestamps = get_speech_timestamps(
                 wav,
                 model,
                 threshold=self.vad_threshold,
                 sampling_rate=sr,
+                min_silence_duration_ms=self.vad_min_silence_ms,
+                speech_pad_ms=self.vad_padding_ms,
                 return_seconds=False
             )
             
@@ -457,8 +484,14 @@ class PyWhisperCppASR(BaseASR):
                     initializer=_init_worker,
                     initargs=(self.model_path, self.use_coreml, self.n_threads)
                 ) as executor:
-                    # Prepare arguments for all segments
-                    segment_args = []
+                    # Process segments with context stitching
+                    # For context stitching to work, we need to process segments in order
+                    # We'll submit them in batches but wait for each batch to complete
+                    
+                    all_results = []
+                    previous_text = ""  # Track previous segment text for context stitching
+                    
+                    # Process segments in order to maintain context
                     for idx, (start_ms, end_ms) in enumerate(vad_segments):
                         # Extract audio segment
                         audio_segment = full_audio[start_ms:end_ms]
@@ -468,25 +501,26 @@ class PyWhisperCppASR(BaseASR):
                         audio_segment.export(buffer, format="wav")
                         audio_segment_bytes = buffer.getvalue()
                         
-                        # Prepare arguments tuple for worker (only 5 params - model already loaded)
+                        # Prepare arguments tuple for worker (now with context stitching params)
                         args = (
                             idx,
                             start_ms,
                             end_ms,
                             audio_segment_bytes,
                             self.language,
+                            previous_text,  # Pass previous segment text for context
+                            self.vad_context_stitching,  # Pass context stitching flag
                         )
-                        segment_args.append(args)
-                    
-                    # Submit all tasks
-                    future_to_index = {executor.submit(_transcribe_segment_worker, args): args[0] 
-                                      for args in segment_args}
-                    
-                    # Collect results as they complete
-                    results = {}
-                    for future in as_completed(future_to_index):
-                        result = future.result()
-                        results[result['index']] = result
+                        
+                        # Submit task and wait for completion to get context for next segment
+                        future = executor.submit(_transcribe_segment_worker, args)
+                        result = future.result()  # Wait for this segment to complete
+                        
+                        all_results.append(result)
+                        
+                        # Update previous text for next segment's context
+                        if self.vad_context_stitching and result['text']:
+                            previous_text = result['text']
                         
                         completed_segments += 1
                         segment_progress = int(10 + (completed_segments / total_segments) * 70)
@@ -495,9 +529,9 @@ class PyWhisperCppASR(BaseASR):
                         if result['error']:
                             logger.warning(f"Segment {result['index']} failed: {result['error']}")
                 
-                # Sort results by index and merge segments
-                for idx in sorted(results.keys()):
-                    all_segments.extend(results[idx]['segments'])
+                # Merge segments from all results
+                for result in all_results:
+                    all_segments.extend(result['segments'])
                 
                 callback(80, "Merging segments...")
                 

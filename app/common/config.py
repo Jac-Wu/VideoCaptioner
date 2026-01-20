@@ -139,7 +139,7 @@ class Config(QConfig):
         "Translate", "NeedReflectTranslate", False, BoolValidator()
     )
     deeplx_endpoint = ConfigItem("Translate", "DeeplxEndpoint", "")
-    batch_size = RangeConfigItem("Translate", "BatchSize", 10, RangeValidator(5, 50))
+    batch_size = RangeConfigItem("Translate", "BatchSize", 10, RangeValidator(5, 200))
     thread_num = RangeConfigItem("Translate", "ThreadNum", 10, RangeValidator(1, 100))
 
     # ------------------- 转录配置 -------------------
@@ -204,6 +204,18 @@ class Config(QConfig):
     )
     pywhisper_vad_max_workers = RangeConfigItem(
         "PyWhisper", "VadMaxWorkers", 2, RangeValidator(1, 8)
+    )
+    # VAD padding configuration (speech_pad_ms) - adds buffer before/after speech
+    pywhisper_vad_padding_ms = RangeConfigItem(
+        "PyWhisper", "VadPaddingMs", 2000, RangeValidator(0, 5000)
+    )
+    # Minimum silence duration for segment splitting (min_silence_duration_ms)
+    pywhisper_vad_min_silence_ms = RangeConfigItem(
+        "PyWhisper", "VadMinSilenceMs", 1000, RangeValidator(100, 5000)
+    )
+    # Enable context stitching between segments
+    pywhisper_vad_context_stitching = ConfigItem(
+        "PyWhisper", "VadContextStitching", True, BoolValidator()
     )
 
     # ------------------- Faster Whisper 配置 -------------------

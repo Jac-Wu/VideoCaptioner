@@ -532,6 +532,9 @@ class TranscribeConfig:
     pywhisper_vad_method: Optional[VadMethodEnum] = VadMethodEnum.SILERO_V4_FW
     pywhisper_vad_threshold: int = 50  # 0-100, will be converted to 0.0-1.0
     pywhisper_vad_max_workers: int = 2  # Maximum concurrent workers for VAD segment processing
+    pywhisper_vad_padding_ms: int = 400  # Padding before/after speech segments (ms)
+    pywhisper_vad_min_silence_ms: int = 1000  # Minimum silence duration to split segments (ms)
+    pywhisper_vad_context_stitching: bool = True  # Enable context stitching between segments
 
     def _mask_key(self, key: Optional[str]) -> str:
         """Mask sensitive key for display"""

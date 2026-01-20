@@ -82,6 +82,9 @@ class TaskFactory:
             pywhisper_vad_method=cfg.pywhisper_vad_method.value,
             pywhisper_vad_threshold=cfg.pywhisper_vad_threshold.value,
             pywhisper_vad_max_workers=cfg.pywhisper_vad_max_workers.value,
+            pywhisper_vad_padding_ms=cfg.pywhisper_vad_padding_ms.value,
+            pywhisper_vad_min_silence_ms=cfg.pywhisper_vad_min_silence_ms.value,
+            pywhisper_vad_context_stitching=cfg.pywhisper_vad_context_stitching.value,
             # Whisper API 配置
             whisper_api_key=cfg.whisper_api_key.value,
             whisper_api_base=cfg.whisper_api_base.value,
